@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Typing SRS — Study App</title>
+  <style>
+    :root{
+      --bg:#0f1222; /* deep indigo */
+      --panel:#171a2c; /* card bg */
+      --muted:#aab0d5;
+      --text:#eef0ff;
+      --accent:#7c9cff;
+      --accent-2:#00e0a4;
+      --danger:#ff5e7e;
+      --warn:#ffce5e;
+      --ok:#57e389;
+      --border:#242743;
+      --shadow: 0 8px 30px rgba(0,0,0,.35);
+      --radius: 16px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      background: radial-gradient(1200px 700px at 10% -10%, #1b1f39, transparent 60%),
+                  radial-gradient(1400px 900px at 110% 10%, #12142a, transparent 60%),
+                  var(--bg);
+      color:var(--text);
+      display:flex; flex-direction:column;
+    }
+    header{
+      display:flex; align-items:center; gap:16px;
+      padding:18px 22px; border-bottom:1px solid var(--border);
+      position:sticky; top:0; backdrop-filter:saturate(140%) blur(6px);
+      background:linear-gradient(0deg, rgba(15,18,34,.9), rgba(15,18,34,.9));
+      z-index:50;
+    }
+    header h1{font-size:18px; margin:0; letter-spacing:.3px; font-weight:700}
+    .tag{font-size:12px; color:var(--muted); border:1px solid var(--border); padding:2px 8px; border-radius:999px}
+    .container{display:grid; grid-template-columns: 360px 1fr; gap:18px; padding:18px; flex:1}
+    @media (max-width: 980px){ .container{grid-template-columns:1fr;}}
+
+    .card{background:linear-gradient(180deg, rgba(23,26,44,.8), rgba(23,26,44,.7)); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow)}
+    .panel{padding:16px}
+
+    /* Sidebar */
+    .sidebar{display:flex; flex-direction:column; gap:12px}
+    .section-title{display:flex; justify-content:space-between; align-items:center; padding:14px 16px; border-bottom:1px dashed var(--border); font-weight:700}
+
+    .input, textarea, select{
+      width:100%; padding:12px 14px; border-radius:12px; border:1px solid var(--border);
+      background:#0e1122; color:var(--text); outline:none; font-size:14px;
+    }
+    textarea{min-height:80px; resize:vertical}
+    .row{display:flex; gap:10px}
+    .btn{
+      border:1px solid var(--border); background:#0f1328; color:var(--text); padding:10px 14px; border-radius:12px; cursor:pointer;
+      font-weight:600; letter-spacing:.2px; transition:.18s transform, .18s background, .18s border-color;
+    }
+    .btn:hover{transform:translateY(-1px); border-color:#2d315a}
+    .btn:active{transform:translateY(0)}
+    .btn.primary{background: linear-gradient(180deg, #3b4dbb, #2e3ea1); border-color:#4152c8}
+    .btn.success{background: linear-gradient(180deg, #19b37c, #0aa267); border-color:#1fd497}
+    .btn.warn{background: linear-gradient(180deg, #e1b449, #c69527); border-color:#ffce5e}
+    .btn.ghost{background:transparent}
+    .btn.danger{background:linear-gradient(180deg, #d9486e, #b83d5e); border-color:#ff7c9a}
+
+    .card-list{max-height:340px; overflow:auto; border-top:1px dashed var(--border)}
+    .list-item{display:grid; grid-template-columns: 1fr auto; gap:6px; align-items:center; padding:10px 12px; border-bottom:1px dashed var(--border)}
+    .list-item .meta{font-size:12px; color:var(--muted)}
+    .list-item .title{font-weight:700}
+    .pill{font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid var(--border); color:var(--muted)}
+
+    /* Study area */
+    .study{display:flex; flex-direction:column; height:100%}
+    .big-card{flex:1; display:flex; flex-direction:column; padding:24px; gap:14px}
+    .prompt{font-size:18px; line-height:1.4}
+    .answer-box{display:flex; gap:10px; align-items:center}
+    .answer-input{flex:1}
+    .feedback{min-height:24px; font-size:14px}
+    .feedback.ok{color:var(--ok)}
+    .feedback.err{color:var(--danger)}
+    .stats{display:flex; gap:12px; flex-wrap:wrap}
+    .stat{padding:10px 12px; border-radius:12px; border:1px solid var(--border); background:#0e1122; font-size:12px}
+
+    .shake{animation:shake .35s}
+    @keyframes shake{ 10%, 90% {transform:translateX(-1px)} 20%, 80% {transform:translateX(2px)} 30%, 50%, 70%{transform:translateX(-4px)} 40%,60%{transform:translateX(4px)} }
+
+    .progress{height:8px; background:#0e1122; border:1px solid var(--border); border-radius:999px; overflow:hidden}
+    .progress > div{height:100%; background:linear-gradient(90deg, var(--accent), var(--accent-2))}
+
+    .tiny{font-size:11px; color:var(--muted)}
+    .muted{color:var(--muted)}
+    .center{display:flex; justify-content:center; align-items:center}
+    .hidden{display:none}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Typing SRS</h1>
+    <span class="tag">Type-to-answer • Auto Again/Hard/Good/Easy</span>
+    <div style="margin-left:auto; display:flex; gap:10px; align-items:center">
+      <button class="btn ghost" id="exportBtn" title="Export deck JSON">Export</button>
+      <label class="btn ghost" title="Import deck JSON">
+        Import <input id="importFile" type="file" accept="application/json" hidden>
+      </label>
+      <label class="row tiny" style="align-items:center; gap:6px">
+        <input type="checkbox" id="ignorePunct"> ignore punctuation
+      </label>
+      <label class="row tiny" style="align-items:center; gap:6px">
+        <input type="checkbox" id="caseInsensitive" checked> case-insensitive
+      </label>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- Sidebar: build & manage cards -->
+    <aside class="card sidebar">
+      <div class="section-title">
+        <div>Deck Builder</div>
+        <div class="tiny" id="deckCount">0 cards</div>
+      </div>
+      <div class="panel" style="display:flex; flex-direction:column; gap:10px">
+        <input class="input" id="front" placeholder="Front (prompt/question)" />
+        <textarea id="back" placeholder="Back (expected answer)"></textarea>
+        <div class="row">
+          <button class="btn primary" id="addCard">Add Card</button>
+          <button class="btn ghost" id="clearFields" title="Clear form">Clear</button>
+        </div>
+      </div>
+      <div class="section-title">
+        <div>Cards</div>
+        <div class="row tiny">
+          <button class="btn ghost tiny" id="newDemo">Load Demo</button>
+          <button class="btn ghost tiny" id="wipeAll">Wipe</button>
+        </div>
+      </div>
+      <div class="card-list" id="cardList"></div>
+    </aside>
+
+    <!-- Study Area -->
+    <main class="card study">
+      <div class="section-title">
+        <div>Study</div>
+        <div class="row tiny">
+          <span id="queueInfo" class="pill">0 due</span>
+          <span id="newInfo" class="pill">0 new</span>
+          <span id="learningInfo" class="pill">0 learning</span>
+        </div>
+      </div>
+
+      <div class="big-card">
+        <div class="progress"><div id="progressBar" style="width:0%"></div></div>
+        <div class="stats">
+          <div class="stat">Ease: <strong id="easeStat">–</strong></div>
+          <div class="stat">Interval: <strong id="intStat">–</strong></div>
+          <div class="stat">Due: <strong id="dueStat">–</strong></div>
+          <div class="stat">Tries: <strong id="triesStat">0</strong></div>
+        </div>
+
+        <div class="prompt" id="prompt">Add cards to begin.</div>
+
+        <div class="answer-box">
+          <input id="answer" class="input answer-input" placeholder="Type your answer and press Enter" autocomplete="off" />
+          <button class="btn success" id="submit">Enter</button>
+          <button class="btn warn" id="giveUp" title="Mark as Again & show answer">Give up</button>
+        </div>
+        <div class="feedback" id="feedback"></div>
+
+        <div class="row">
+          <button class="btn" id="start">Start Session</button>
+          <button class="btn ghost" id="skip" title="Skip this card for now">Skip</button>
+          <span class="tiny">Auto-grade → 1 try = Easy, 2 = Good, 3–4 = Hard, 5+ or Give up = Again</span>
+        </div>
+      </div>
+
+      <div class="panel" style="border-top:1px dashed var(--border); display:flex; gap:10px; flex-wrap:wrap">
+        <div class="tiny">Session Stats:</div>
+        <div class="pill" id="sEasy">Easy: 0</div>
+        <div class="pill" id="sGood">Good: 0</div>
+        <div class="pill" id="sHard">Hard: 0</div>
+        <div class="pill" id="sAgain">Again: 0</div>
+      </div>
+    </main>
+  </div>
+
+  <template id="itemTpl">
+    <div class="list-item">
+      <div>
+        <div class="title"></div>
+        <div class="meta"></div>
+      </div>
+      <div class="row">
+        <button class="btn tiny ghost edit">Edit</button>
+        <button class="btn tiny danger del">Delete</button>
+      </div>
+    </div>
+  </template>
+
+  <script>
+  /********************
+   * Storage + Models *
+   ********************/
+  const STORE_KEY = 'typingSRS.v1';
+  function now(){ return Date.now(); }
+  function daysFrom(d){ return Math.round((d - now())/(1000*60*60*24)); }
+  function fmtDate(ts){ if(!ts) return '–'; const d=new Date(ts); return d.toLocaleString(); }
+  const clamp=(x,min,max)=>Math.max(min,Math.min(max,x));
+
+  function load(){
+    try{ return JSON.parse(localStorage.getItem(STORE_KEY)) || {cards:[], prefs:{caseInsensitive:true, ignorePunct:false}}; }
+    catch(e){ return {cards:[], prefs:{caseInsensitive:true, ignorePunct:false}} }
+  }
+  function save(state){ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+
+  let state = load();
+
+  /******************
+   * Utility helpers *
+   ******************/
+  function uid(){ return Math.random().toString(36).slice(2)+Date.now().toString(36); }
+  function normalize(s){
+    const ci = caseInsensitive.checked;
+    const ip = ignorePunct.checked;
+    let t = s.trim();
+    if(ci) t = t.toLowerCase();
+    if(ip) t = t.replace(/[\p{P}\p{S}]/gu,''); // strip punctuation/symbols
+    return t.replace(/\s+/g,' ');
+  }
+
+  function createCard(front, back){
+    return {
+      id: uid(),
+      front, back,
+      created: now(),
+      ease: 2.5, // SM-2-ish ease factor
+      intervalDays: 0,
+      due: now(),
+      new: true,
+      history: [] // {t, tries, rating, ease, interval}
+    }
+  }
+
+  function updateList(){
+    deckCount.textContent = `${state.cards.length} cards`;
+    const list = cardList; list.innerHTML='';
+    const tpl = document.getElementById('itemTpl');
+    state.cards.forEach(c=>{
+      const node = tpl.content.firstElementChild.cloneNode(true);
+      node.querySelector('.title').textContent = c.front;
+      node.querySelector('.meta').textContent = `Ans: ${c.back} • Ease ${c.ease.toFixed(2)} • Int ${c.intervalDays}d • Due ${new Date(c.due).toLocaleDateString()}`;
+      node.querySelector('.edit').onclick=()=>{
+        front.value=c.front; back.value=c.back; front.focus();
+        // Replace on next add
+        pendingEdit = c.id;
+      }
+      node.querySelector('.del').onclick=()=>{
+        state.cards = state.cards.filter(x=>x.id!==c.id);
+        save(state); updateList();
+      }
+      list.appendChild(node);
+    })
+  }
+
+  /******************
+   * Scheduler (SM-2-ish with auto rating from tries)
+   ******************/
+  let session = null; // {queue:[], idx, total, stats, currentTries}
+
+  function buildQueue(){
+    const due = state.cards.filter(c=>c.due <= now()).sort((a,b)=>a.due-b.due);
+    const fresh = state.cards.filter(c=>c.new);
+    // mix: all due first, then up to 20 new
+    const queue = [...due, ...fresh.slice(0, 20)];
+    return queue;
+  }
+
+  function startSession(){
+    const q = buildQueue();
+    session = {
+      queue: q, idx: 0, total: q.length,
+      stats: {easy:0, good:0, hard:0, again:0},
+      currentTries: 0,
+    }
+    updateUIForCurrent();
+    answer.focus();
+  }
+
+  function currentCard(){ return session?.queue?.[session.idx] || null; }
+  function progress(){ if(!session) return 0; return session.total? Math.round(((session.idx)/session.total)*100):0 }
+
+  function updateUIForCurrent(){
+    // top counters
+    const dueCount = state.cards.filter(c=>c.due <= now()).length;
+    const newCount = state.cards.filter(c=>c.new).length;
+    const learningCount = state.cards.length - dueCount - newCount;
+    queueInfo.textContent = `${dueCount} due`;
+    newInfo.textContent = `${newCount} new`;
+    learningInfo.textContent = `${learningCount} learning`;
+
+    if(!session || session.total===0){
+      prompt.textContent = state.cards.length? 'No cards are due. Add more or wait until some are due.' : 'Add cards to begin.';
+      progressBar.style.width = '0%';
+      easeStat.textContent = '–'; intStat.textContent='–'; dueStat.textContent='–'; triesStat.textContent='0';
+      feedback.textContent='';
+      return;
+    }
+
+    const c = currentCard();
+    progressBar.style.width = `${progress()}%`;
+    prompt.textContent = c?.front || '';
+    easeStat.textContent = c ? c.ease.toFixed(2) : '–';
+    intStat.textContent = c ? `${c.intervalDays}d` : '–';
+    dueStat.textContent = c ? fmtDate(c.due) : '–';
+    triesStat.textContent = session.currentTries;
+    feedback.textContent = '';
+    answer.value = '';
+  }
+
+  function applyGrade(card, tries, gaveUp=false){
+    // Determine rating by tries
+    let rating, q;
+    if(gaveUp || tries>=5){ rating='again'; q=1; }
+    else if(tries>=3){ rating='hard'; q=3; }
+    else if(tries===2){ rating='good'; q=4; }
+    else { rating='easy'; q=5; }
+
+    // SM-2 adjustments
+    let ease = card.ease;
+    if(q>=4) ease += (q-3)*0.15; // +0.30 for easy, +0.15 for good
+    if(q===3) ease -= 0.15;
+    if(q<=2) ease -= 0.30;
+    ease = clamp(ease, 1.3, 3.5);
+
+    let interval = card.intervalDays;
+    if(interval===0){ interval = 1; }
+    else if(interval===1){ interval = 6; }
+    else { interval = Math.round(interval * ease); }
+
+    // difficulty multipliers
+    const mult = rating==='easy'?1.3 : rating==='good'?1.0 : rating==='hard'?0.7 : 0.2;
+    interval = Math.max(1, Math.round(interval * mult));
+
+    card.ease = ease;
+    card.intervalDays = interval;
+    card.due = now() + interval*24*60*60*1000;
+    card.new = false;
+
+    card.history.push({t: now(), tries, rating, ease, interval});
+    state.cards = state.cards.map(c=>c.id===card.id? card : c);
+
+    session.stats[rating]++;
+    sEasy.textContent = `Easy: ${session.stats.easy}`;
+    sGood.textContent = `Good: ${session.stats.good}`;
+    sHard.textContent = `Hard: ${session.stats.hard}`;
+    sAgain.textContent = `Again: ${session.stats.again}`;
+
+    save(state);
+  }
+
+  function checkAnswer(){
+    const c = currentCard(); if(!c) return;
+    const user = normalize(answer.value);
+    const expected = normalize(c.back);
+    if(!user){
+      answer.classList.add('shake'); setTimeout(()=>answer.classList.remove('shake'), 360);
+      return;
+    }
+    if(user === expected){
+      applyGrade(c, session.currentTries+1);
+      feedback.className='feedback ok';
+      const tries = session.currentTries+1;
+      feedback.textContent = `✔ Correct in ${tries} ${tries===1?'try':'tries'} — scheduled next in ${c.intervalDays} day(s).`;
+      // next card
+      session.idx++;
+      session.currentTries = 0;
+      if(session.idx>=session.total){
+        prompt.textContent = 'Session complete! 🎉';
+        progressBar.style.width = '100%';
+        answer.value='';
+      } else {
+        updateUIForCurrent();
+      }
+      updateList();
+    } else {
+      session.currentTries++;
+      triesStat.textContent = session.currentTries;
+      feedback.className='feedback err';
+      feedback.textContent = `✖ Not quite. Try again.`;
+      answer.classList.add('shake'); setTimeout(()=>answer.classList.remove('shake'), 360);
+    }
+  }
+
+  function skipCard(){ if(!session) return; session.idx = Math.min(session.idx+1, session.total); updateUIForCurrent(); }
+
+  function giveUpCard(){
+    const c = currentCard(); if(!c) return;
+    applyGrade(c, session.currentTries+1, true);
+    feedback.className='feedback err';
+    feedback.textContent = `Shown answer: ${c.back}`;
+    session.idx++; session.currentTries=0; updateUIForCurrent(); updateList();
+  }
+
+  /******************
+   * Events + UI
+   ******************/
+  let pendingEdit = null;
+
+  addCard.onclick = ()=>{
+    const f = front.value.trim(); const b = back.value.trim();
+    if(!f || !b){ alert('Please fill both Front and Back.'); return; }
+    if(pendingEdit){
+      const idx = state.cards.findIndex(c=>c.id===pendingEdit);
+      if(idx>-1){ state.cards[idx].front=f; state.cards[idx].back=b; }
+      pendingEdit = null;
+    } else {
+      state.cards.push(createCard(f,b));
+    }
+    front.value=''; back.value=''; front.focus();
+    save(state); updateList();
+  }
+  clearFields.onclick = ()=>{ front.value=''; back.value=''; pendingEdit=null; }
+
+  start.onclick = ()=> startSession();
+  submit.onclick = ()=> checkAnswer();
+  answer.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); checkAnswer(); }});
+  skip.onclick = ()=> skipCard();
+  giveUp.onclick = ()=> giveUpCard();
+
+  exportBtn.onclick = ()=>{
+    const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download='typing-srs-deck.json'; a.click();
+    setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  }
+  importFile.onchange = (e)=>{
+    const file = e.target.files?.[0]; if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      try{
+        const data = JSON.parse(reader.result);
+        if(!data.cards) throw new Error('Invalid file');
+        state = data; save(state); updateList(); updateUIForCurrent();
+      } catch(err){ alert('Could not import: '+err.message) }
+    }
+    reader.readAsText(file);
+  }
+
+  ignorePunct.checked = !!state.prefs?.ignorePunct;
+  caseInsensitive.checked = state.prefs?.caseInsensitive !== false;
+  ignorePunct.onchange = caseInsensitive.onchange = ()=>{ state.prefs={caseInsensitive:caseInsensitive.checked, ignorePunct:ignorePunct.checked}; save(state); }
+
+  newDemo.onclick = ()=>{
+    const demo = [
+      ['Capital of France?','Paris'],
+      ['H2O is called…','water'],
+      ['2 + 2 =','4'],
+      ['Who wrote "1984"?','George Orwell'],
+      ['Derivative of x^2','2x'],
+      ['Spanish for "thank you"','gracias']
+    ];
+    demo.forEach(([f,b])=> state.cards.push(createCard(f,b)));
+    save(state); updateList();
+  }
+
+  wipeAll.onclick = ()=>{
+    if(confirm('Wipe ALL cards & settings?')){ state={cards:[], prefs:{caseInsensitive:true, ignorePunct:false}}; save(state); updateList(); updateUIForCurrent(); }
+  }
+
+  // Init
+  updateList();
+  updateUIForCurrent();
+  </script>
+</body>
+</html>
