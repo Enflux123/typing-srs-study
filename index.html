@@ -5,12 +5,14 @@
   <title>Typing Study App</title>
   <style>
     body { font-family: sans-serif; background:#f7f7f7; padding:20px; }
-    #app { max-width:600px; margin:auto; text-align:center; }
+    #app { max-width:650px; margin:auto; text-align:center; }
     .card { background:white; padding:20px; margin:20px 0; border-radius:10px; box-shadow:0 2px 5px rgba(0,0,0,0.1); }
     .hidden { display:none; }
     button { margin:5px; padding:10px 20px; border:none; border-radius:8px; cursor:pointer; }
     .correct { background:#4caf50; color:white; }
     .wrong { background:#f44336; color:white; }
+    textarea { width:100%; height:120px; padding:10px; }
+    #nextReview { margin-top:10px; font-size:0.9em; color:#555; }
   </style>
 </head>
 <body>
@@ -18,10 +20,13 @@
   <h1>Typing Study App</h1>
 
   <!-- Card input -->
-  <div>
+  <div class="card">
     <input id="frontInput" placeholder="Front (term)">
     <input id="backInput" placeholder="Back (definition)">
     <button onclick="addCard()">Add Card</button>
+    <h3>Import Cards</h3>
+    <textarea id="importBox" placeholder="Paste cards here: Term | Definition"></textarea>
+    <button onclick="importCards()">Import</button>
   </div>
 
   <!-- Study area -->
@@ -32,8 +37,9 @@
     </form>
     <div id="backArea" class="hidden">
       <p id="backText"></p>
-      <button class="correct" onclick="markCorrect()">Correct</button>
-      <button class="wrong" onclick="markWrong()">Wrong</button>
+      <button class="correct" type="button" onclick="markCorrect()">Correct</button>
+      <button class="wrong" type="button" onclick="markWrong()">Wrong</button>
+      <div id="nextReview"></div>
     </div>
   </div>
 
@@ -49,6 +55,22 @@ let queue = [];
 let current = null;
 let tries = 0;
 
+// Intervals (ms)
+const intervals = {
+  1: 24*60*60*1000,  // 1 day
+  2: 10*60*1000,     // 10 minutes
+  3: 6*60*1000,      // 6 minutes
+  default: 1*60*1000 // 1 minute
+};
+
+// Human-readable
+function intervalLabel(ms) {
+  if(ms >= 24*60*60*1000) return (ms/(24*60*60*1000))+"d";
+  if(ms >= 60*60*1000) return (ms/(60*60*1000))+"h";
+  if(ms >= 60*1000) return (ms/(60*1000))+"m";
+  return (ms/1000)+"s";
+}
+
 // Add card
 function addCard(){
   const front = document.getElementById("frontInput").value.trim();
@@ -57,6 +79,22 @@ function addCard(){
   cards.push({front, back, due: Date.now()});
   document.getElementById("frontInput").value="";
   document.getElementById("backInput").value="";
+  renderCardList();
+}
+
+// Import cards
+function importCards(){
+  const lines = document.getElementById("importBox").value.trim().split("\n");
+  lines.forEach(line=>{
+    const parts=line.split("|");
+    if(parts.length===2){
+      const front=parts[0].trim(), back=parts[1].trim();
+      if(front && back){
+        cards.push({front, back, due: Date.now()});
+      }
+    }
+  });
+  document.getElementById("importBox").value="";
   renderCardList();
 }
 
@@ -90,6 +128,7 @@ function nextCard(){
   document.getElementById("frontText").textContent = current.front;
   document.getElementById("answerBox").value="";
   document.getElementById("backArea").classList.add("hidden");
+  document.getElementById("nextReview").textContent="";
   document.getElementById("answerBox").focus();
 }
 
@@ -103,15 +142,12 @@ document.getElementById("answerForm").addEventListener("submit", function(e){
 
 // Mark Correct
 function markCorrect(){
-  // Assign interval based on tries
-  let interval;
-  if(tries===1) interval = 24*60*60*1000;     // 1 day
-  else if(tries===2) interval = 10*60*1000;   // 10 min
-  else if(tries===3) interval = 6*60*1000;    // 6 min
-  else interval = 1*60*1000;                  // 1 min
-
+  // Choose interval based on tries
+  let interval = intervals[tries] || intervals.default;
   current.due = Date.now() + interval;
-  nextCard();
+  document.getElementById("nextReview").textContent = "Next review: " + intervalLabel(interval);
+  // Delay so user can see next review time
+  setTimeout(nextCard, 1200);
 }
 
 // Mark Wrong
