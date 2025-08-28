@@ -4,75 +4,68 @@
   <meta charset="UTF-8">
   <title>Typing Study App</title>
   <style>
-    body { font-family: sans-serif; margin: 0; padding: 20px; background: #f7f7f7; }
-    #app { max-width: 600px; margin: auto; text-align: center; }
-    .card { background: white; padding: 20px; margin: 20px 0; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-    .hidden { display: none; }
-    button { margin: 5px; padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; }
-    button:hover { opacity: 0.9; }
-    .easy { background: #4caf50; color: white; }
-    .good { background: #2196f3; color: white; }
-    .hard { background: #ff9800; color: white; }
-    .again { background: #f44336; color: white; }
+    body { font-family: sans-serif; background:#f7f7f7; padding:20px; }
+    #app { max-width:600px; margin:auto; text-align:center; }
+    .card { background:white; padding:20px; margin:20px 0; border-radius:10px; box-shadow:0 2px 5px rgba(0,0,0,0.1); }
+    .hidden { display:none; }
+    button { margin:5px; padding:10px 20px; border:none; border-radius:8px; cursor:pointer; }
+    .correct { background:#4caf50; color:white; }
+    .wrong { background:#f44336; color:white; }
   </style>
 </head>
 <body>
-  <div id="app">
-    <h1>Typing Study App</h1>
+<div id="app">
+  <h1>Typing Study App</h1>
 
-    <!-- Card Input -->
-    <div>
-      <input id="frontInput" placeholder="Front (term/question)">
-      <input id="backInput" placeholder="Back (definition/answer)">
-      <button onclick="addCard()">Add Card</button>
-    </div>
-
-    <!-- Study Area -->
-    <div id="studyArea" class="card hidden">
-      <div id="frontText"></div>
-      <textarea id="answerBox" rows="3" placeholder="Type your answer here..."></textarea>
-      <br>
-      <button id="showDefBtn" onclick="showDefinition()">Show Definition</button>
-      <div id="backArea" class="hidden">
-        <p id="backText"></p>
-        <div>
-          <button class="again" onclick="rateAnswer('again')">Again</button>
-          <button class="hard" onclick="rateAnswer('hard')">Hard</button>
-          <button class="good" onclick="rateAnswer('good')">Good</button>
-          <button class="easy" onclick="rateAnswer('easy')">Easy</button>
-        </div>
-      </div>
-    </div>
-
-    <button id="startBtn" onclick="startSession()">Start Session</button>
-
-    <h3>Cards</h3>
-    <ul id="cardList"></ul>
+  <!-- Card input -->
+  <div>
+    <input id="frontInput" placeholder="Front (term)">
+    <input id="backInput" placeholder="Back (definition)">
+    <button onclick="addCard()">Add Card</button>
   </div>
+
+  <!-- Study area -->
+  <div id="studyArea" class="card hidden">
+    <div id="frontText"></div>
+    <form id="answerForm">
+      <input id="answerBox" autocomplete="off" placeholder="Type your answer..." style="width:100%;padding:10px;">
+    </form>
+    <div id="backArea" class="hidden">
+      <p id="backText"></p>
+      <button class="correct" onclick="markCorrect()">Correct</button>
+      <button class="wrong" onclick="markWrong()">Wrong</button>
+    </div>
+  </div>
+
+  <button id="startBtn" onclick="startSession()">Start Session</button>
+
+  <h3>Cards</h3>
+  <ul id="cardList"></ul>
+</div>
 
 <script>
 let cards = [];
 let queue = [];
 let current = null;
+let tries = 0;
 
-// Add new card
+// Add card
 function addCard(){
   const front = document.getElementById("frontInput").value.trim();
   const back = document.getElementById("backInput").value.trim();
   if(!front || !back) return;
-  cards.push({front, back, ease: 2.5, interval: 0, due: Date.now()});
+  cards.push({front, back, due: Date.now()});
   document.getElementById("frontInput").value="";
   document.getElementById("backInput").value="";
   renderCardList();
 }
 
-// Show card list
 function renderCardList(){
   const ul = document.getElementById("cardList");
-  ul.innerHTML = "";
-  cards.forEach((c,i)=>{
-    const li = document.createElement("li");
-    li.textContent = `${c.front} → ${c.back}`;
+  ul.innerHTML="";
+  cards.forEach(c=>{
+    const li=document.createElement("li");
+    li.textContent=`${c.front} → ${c.back}`;
     ul.appendChild(li);
   });
 }
@@ -85,7 +78,7 @@ function startSession(){
   nextCard();
 }
 
-// Load next card
+// Next card
 function nextCard(){
   if(queue.length===0){
     alert("Session complete!");
@@ -93,31 +86,39 @@ function nextCard(){
     return;
   }
   current = queue.shift();
+  tries = 0;
   document.getElementById("frontText").textContent = current.front;
-  document.getElementById("answerBox").value = "";
+  document.getElementById("answerBox").value="";
   document.getElementById("backArea").classList.add("hidden");
-  document.getElementById("showDefBtn").classList.remove("hidden");
+  document.getElementById("answerBox").focus();
 }
 
-// Show definition
-function showDefinition(){
+// Submit answer
+document.getElementById("answerForm").addEventListener("submit", function(e){
+  e.preventDefault();
+  tries++;
   document.getElementById("backText").textContent = current.back;
   document.getElementById("backArea").classList.remove("hidden");
-  document.getElementById("showDefBtn").classList.add("hidden");
+});
+
+// Mark Correct
+function markCorrect(){
+  // Assign interval based on tries
+  let interval;
+  if(tries===1) interval = 24*60*60*1000;     // 1 day
+  else if(tries===2) interval = 10*60*1000;   // 10 min
+  else if(tries===3) interval = 6*60*1000;    // 6 min
+  else interval = 1*60*1000;                  // 1 min
+
+  current.due = Date.now() + interval;
+  nextCard();
 }
 
-// Rate answer (self-graded)
-function rateAnswer(rating){
-  let factor = 1;
-  if(rating==="again"){ current.interval = 0; factor = 0.5; }
-  if(rating==="hard"){ current.interval = Math.max(1, current.interval*1.2); factor = 1.2; }
-  if(rating==="good"){ current.interval = Math.max(1, current.interval*2); factor = 2; }
-  if(rating==="easy"){ current.interval = Math.max(1, current.interval*3); factor = 2.5; }
-
-  current.ease = Math.max(1.3, current.ease*factor);
-  current.due = Date.now() + current.interval*24*60*60*1000;
-
-  nextCard();
+// Mark Wrong
+function markWrong(){
+  document.getElementById("backArea").classList.add("hidden");
+  document.getElementById("answerBox").value="";
+  document.getElementById("answerBox").focus();
 }
 </script>
 </body>
