@@ -5,8 +5,35 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Queue Study App — Custom SRS</title>
 <style>
+/* Space between termRow and definition */
+#definitionBox {
+  margin-top: 16px; /* adjust as needed */
+}
+.termRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  margin-top: 20px; /* moves the entire row down */
+  /* or use padding-top instead: padding-top: 12px; */
+}
+
 #answerInput {
-  margin-top: 16px; /* adjust value as needed */
+  margin-top: 16px; /* space below input */
+}
+
+#judgeRow {
+  margin-top: 20px; /* extra spacing if needed */
+}
+
+#correctBtn {
+  margin-top: 20px; /* adjust value as needed */
+}
+#wrongBtn {
+  margin-top: 20px; /* adjust value as needed */
+}
+#keyCorrect, #keyWrong, #keybindContainer {
+  display: none;
 }
 
   :root{
@@ -96,13 +123,15 @@
         <textarea id="importBox" rows="4" placeholder="e.g. Photosynthesis | Process plants use to convert sunlight"></textarea>
         <div style="display:flex; gap:8px; margin-top:8px">
           <button id="importBtn">Import</button>
+    <button id="importSaveBtn">Import Save State</button>
+    <button id="exportSaveBtn">Export Save State</button>
           <button id="clearBtn" class="ghost">Clear All Cards</button>
 <label class="toggle" title="Dark mode">
   <input type="checkbox" id="darkToggle"> Dark
 </label>
 
 <div style="display:flex; gap:6px; align-items:center">
-  <span class="small">Keybinds:</span>
+  <span class="small" id="Keybinds: text" hidden>Keybinds:</span>
   <input type="text" id="keyCorrect" maxlength="1" title="Key for Correct" style="width:24px" value="[">
   <input type="text" id="keyWrong" maxlength="1" title="Key for Wrong" style="width:24px" value="]">
 </div>
@@ -125,10 +154,9 @@
           <div style="display:flex; justify-content:space-between; align-items:center">
             <div>
               <strong>Study</strong>
-              <div class="small">Type answer → Enter (reveal) → Correct / Wrong</div>
+              <div class="small">Type answer → Enter (reveal) → Correct "[" / Wrong "]" </div>
             </div>
             <div style="display:flex; gap:8px; align-items:center">
-              <div class="small"> <label>Show queue</label></div>
               <button id="startBtn">Start Session</button>
               <button id="pauseBtn" class="ghost hidden">Pause</button>
             </div>
@@ -143,12 +171,10 @@
   </div>
 </div>
 
-
+            <div class="definition" id="definitionBox"></div>
             <div>
               <input id="answerInput" type="text" placeholder="Type your answer and press Enter" autocomplete="off" />
             </div>
-
-            <div class="definition" id="definitionBox"></div>
 
             <div id="judgeRow" style="display:none; margin-top:6px; display:flex; gap:8px">
               <button id="correctBtn" class="btn-correct" style="padding:8px 12px; border-radius:8px; color:white">Correct</button>
@@ -190,6 +216,7 @@
 <script>
 
 /* ========= Data model & persistence ========= */
+let definitionRevealed = false;
 const STORAGE_KEY = 'queueStudyApp.v1';
 
 let store = {
@@ -338,6 +365,7 @@ function endSession(){
 /* Pop next card */
 function nextCard(){
   if(!sessionActive) return;
+  
   if(queue.length === 0){
     // done
     el('studyArea').style.display = 'none';
@@ -349,36 +377,42 @@ function nextCard(){
     saveStore();
     return;
   }
+
   // get the next queued item
   const item = queue.shift();
-  current = item;
+  current = item; // keep current card separate
   tries = 0;
   inputLocked = false;
+
   renderCurrentCard();
   renderQueueUI();
   updateCountersUI();
   saveStore();
 }
 
+
 /* Render the current shown card */
 function renderCurrentCard(){
   if(!current){ el('termTitle').textContent = '—'; return; }
   const card = getCard(current.cardId);
   if(!card){ nextCard(); return; }
+
   el('termTitle').textContent = card.term;
   el('triesLabel').textContent = `Tries: ${tries}`;
-  // status tag
   const [label, cls] = mapStatusToClass(card.status);
   el('statusTag').textContent = label;
   el('statusTag').className = `statusTag ${cls}`;
-  // hide definition + judge row until user submits
+
   el('definitionBox').style.display = 'none';
   el('definitionBox').textContent = '';
   el('judgeRow').style.display = 'none';
   el('answerInput').value = '';
   el('answerInput').disabled = false;
   el('answerInput').focus();
+
+  definitionRevealed = false; // reset for new card
 }
+
 
 /* When user presses Enter to reveal definition */
 el('answerInput').addEventListener('keydown', (e)=>{
@@ -395,7 +429,9 @@ function showDefinition(){
   el('definitionBox').textContent = card.def;
   el('definitionBox').style.display = 'block';
   el('judgeRow').style.display = 'flex';
+  definitionRevealed = true; // mark definition as revealed
 }
+
 
 /* Wrong button logic:
    - increment tries
@@ -478,45 +514,83 @@ function demoteCard(card){
   // levels: mastered -> applying -> learning -> new
   if(card.status === 'mastered') card.status = 'applying';
   else if(card.status === 'applying') card.status = 'learning';
-  else if(card.status === 'learning') card.status = 'new';
-  else card.status = 'new';
+  else if(card.status === 'learning') card.status = 'learning'; // prevent going below 'learning'
+  else if(card.status === 'new') card.status = 'learning'; // move 'new' to 'learning' on wrong
+
   // reset streak when demoted
   card.streak = Math.max(0, (card.streak || 0) - 1);
 }
+
 
 /* ========= Queue panel rendering ========= */
 function renderQueueUI(){
   const qList = el('queueList');
   qList.innerHTML = '';
-  for(let i=0;i<queue.length;i++){
+
+  // 1️⃣ Add current card first
+  if(current){
+    const card = getCard(current.cardId);
+    if(card){
+      const node = document.createElement('div');
+      node.className = 'queueItem current-card'; // optional CSS class
+
+      const box = document.createElement('div');
+      box.className = 'colorBox';
+      box.style.background = getComputedStyle(document.documentElement)
+                               .getPropertyValue('--' + card.status).trim();
+      node.appendChild(box);
+
+      const span = document.createElement('div');
+      span.textContent = card.term;
+      node.appendChild(span);
+
+      // show offset if present
+      if(current.offset){
+        const off = document.createElement('div');
+        off.className = 'offsetBadge';
+        off.textContent = `+${current.offset}`;
+        node.appendChild(off);
+      }
+
+      qList.appendChild(node);
+    }
+  }
+
+  // 2️⃣ Add rest of queue
+  for(let i = 0; i < queue.length; i++){
     const item = queue[i];
+    // skip current card if somehow still in queue
+    if(current && item.cardId === current.cardId) continue;
+
     const card = getCard(item.cardId);
     if(!card) continue;
+
     const node = document.createElement('div');
     node.className = 'queueItem';
-    // color box
+
     const box = document.createElement('div');
     box.className = 'colorBox';
-    if(card.status === 'new') box.style.background = getComputedStyle(document.documentElement).getPropertyValue('--new').trim() || '#777';
-    else if(card.status === 'learning') box.style.background = getComputedStyle(document.documentElement).getPropertyValue('--learning').trim() || '#2196f3';
-    else if(card.status === 'applying') box.style.background = getComputedStyle(document.documentElement).getPropertyValue('--applying').trim() || '#7c4dff';
-    else if(card.status === 'mastered') box.style.background = getComputedStyle(document.documentElement).getPropertyValue('--mastered').trim() || '#2e7d32';
+    box.style.background = getComputedStyle(document.documentElement)
+                             .getPropertyValue('--' + card.status).trim();
     node.appendChild(box);
-    // term
+
     const span = document.createElement('div');
     span.textContent = card.term;
     node.appendChild(span);
-    // reinsert offset badge — show only if this queued item has offset
+
     if(item.offset){
       const off = document.createElement('div');
       off.className = 'offsetBadge';
       off.textContent = `+${item.offset}`;
       node.appendChild(off);
     }
+
     qList.appendChild(node);
   }
+
   updateCountersUI();
 }
+
 
 /* Toggle queue panel visibility */
 const toggleQueueBtn = el('toggleQueueBtn');
@@ -576,7 +650,7 @@ el('keyWrong').addEventListener('change', e=>{
 // Listen for key presses
 document.addEventListener('keydown', e=>{
   if(!sessionActive) return;
-  if(current && !inputLocked){
+    if(current && !inputLocked && definitionRevealed){ // check revealed
     if(e.key === store.settings.keyCorrect){
       e.preventDefault();
       el('correctBtn').click();
@@ -587,9 +661,87 @@ document.addEventListener('keydown', e=>{
     }
   }
 });
+el('importSaveBtn').addEventListener('click', () => {
+  const raw = el('importBox').value.trim();
+  if (!raw) {
+    alert('No save state data found in the import box.');
+    return;
+  }
+
+  const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+  const importedCards = [];
+  const newQueue = [];
+
+  for (const line of lines) {
+    const parts = line.split('|').map(p => p.trim());
+    if (parts.length < 4) continue;
+    const [term, def, status, offsetStr] = parts;
+    const offset = parseInt(offsetStr) || 0;
+    const id = uid();
+    importedCards.push({
+      id,
+      term,
+      def,
+      status,
+      streak: status === 'mastered' ? 3 : (status === 'applying' ? 2 : (status === 'learning' ? 1 : 0))
+    });
+    newQueue.push({ cardId: id, offset });
+  }
+
+  store.cards = importedCards;
+  queue = newQueue;
+  saveStore();
+  renderQueueUI();
+  updateCountersUI();
+  el('importBox').value = ''; // clear textarea after import
+  alert('Import complete.');
+});
+
+/* ========= Export Save State to Clipboard ========= */
+function exportSaveStateToClipboard(){
+  if(!current && queue.length === 0){
+    alert('No cards to export.');
+    return;
+  }
+
+  const exportLines = [];
+
+  // 1️⃣ Export current card first
+  if(current){
+    const card = getCard(current.cardId);
+    if(card){
+      exportLines.push(`${card.term} | ${card.def} | ${card.status} | ${current.offset || 0}`);
+    }
+  }
+
+  // 2️⃣ Export remaining cards in queue order, skipping current
+  for(const item of queue){
+    if(current && item.cardId === current.cardId) continue; // skip duplicate
+    const card = getCard(item.cardId);
+    if(!card) continue;
+    exportLines.push(`${card.term} | ${card.def} | ${card.status} | ${item.offset || 0}`);
+  }
+
+  const exportText = exportLines.join('\n');
+
+  // Copy to clipboard
+  navigator.clipboard.writeText(exportText)
+    .then(() => {
+      alert('Save state copied to clipboard!');
+    })
+    .catch(err => {
+      console.error('Failed to copy: ', err);
+      alert('Failed to copy to clipboard.');
+    });
+}
+
+/* Connect to your button */
+el('exportSaveBtn').addEventListener('click', exportSaveStateToClipboard);
 
 </script>
 </body>
 </html>
+
 
 
