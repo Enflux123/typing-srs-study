@@ -17,6 +17,29 @@
   margin-top: 20px; /* moves the entire row down */
   /* or use padding-top instead: padding-top: 12px; */
 }
+#pausePlayBtn {
+    position: absolute;
+  font-size: 24px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  background: transparent;
+  color: var(--pausePlayColor);
+  top: 70px;      
+  left: 69.6%;
+}
+
+/* Light mode */
+:root {
+  --pausePlayColor: #000; /* black in light mode */
+}
+
+/* Dark mode */
+[data-theme="dark"] {
+  --pausePlayColor: #fff; /* white in dark mode */
+}
 
 #answerInput {
   margin-top: 16px; /* space below input */
@@ -35,7 +58,26 @@
 #keyCorrect, #keyWrong, #keybindContainer {
   display: none;
 }
-
+#sessionTimer {
+  position: absolute;       /* takes it out of flow so it doesn’t push others */
+  top: 70px;                /* adjust depending on where you want it */
+  left: 66.5%;
+  transform: translateX(-50%);
+  font-size: 45px;          /* bigger font */
+  font-weight: bold;
+  text-align: center;
+  pointer-events: none;     /* won’t block clicks */
+}
+#avgTime {
+  position: absolute;
+  top: 128px;                /* sits right under timer */
+  left: 66.5%;
+  transform: translateX(-50%);
+  font-size: 13px;
+  font-weight: normal;
+  text-align: center;
+  color: #444;
+}
   :root{
     --bg:#f3f4f6; --card:#fff; --text:#111;
     --new:#777; --learning:#2196f3; --applying:#7c4dff; --mastered:#2e7d32;
@@ -125,7 +167,9 @@
           <button id="importBtn">Import</button>
     <button id="importSaveBtn">Import Save State</button>
     <button id="exportSaveBtn">Export Save State</button>
-          <button id="clearBtn" class="ghost">Clear All Cards</button>
+<button id="resetBtn" style="background:#ef4444; color:white; border:none; padding:8px 12px; border-radius:8px;">Reset</button>
+
+          <input id="delayInput" type="number" value="2" min="0" style="width:80px" placeholder="Delay">
 <label class="toggle" title="Dark mode">
   <input type="checkbox" id="darkToggle"> Dark
 </label>
@@ -138,13 +182,12 @@
 
         </div>
       </div>
+<div id="sessionTimer">00:00</div>
+<div id="avgTime">Avg sec/card: 0.0s</div>
+<button id="pausePlayBtn" style="font-size:24px; width:48px; height:48px; border-radius:50%; border:none; cursor:pointer; display:none;"> ⏸</button>
+
 
       <div style="width:220px">
-        <div style="display:flex; gap:8px; align-items:center">
-          <label class="small">Wrong delay (sec)</label>
-          <input id="delayInput" type="number" value="2" min="0" style="width:70px">
-        </div>
-        <div style="margin-top:8px" class="small">Note: Change delay before starting session.</div>
       </div>
     </div>
 
@@ -215,6 +258,52 @@
 
 <script>
 
+
+// Sequence for reinput
+const reinputSequence = [5, 10, 15, 25, 40, 65, 105, 170]; // extend as needed
+
+let sessionSeconds = 0;
+let sessionTimerInterval = null;
+let answeredCards = 0;
+
+function startSessionTimer() {
+  if (sessionTimerInterval) clearInterval(sessionTimerInterval);
+  sessionSeconds = 0;
+  answeredCards = 0;
+
+  el('sessionTimer').textContent = "00:00";
+  el('avgTime').textContent = "Avg sec/card: 0.0s";
+
+  sessionTimerInterval = setInterval(() => {
+    sessionSeconds++;
+    const mins = String(Math.floor(sessionSeconds / 60)).padStart(2, '0');
+    const secs = String(sessionSeconds % 60).padStart(2, '0');
+    el('sessionTimer').textContent = `${mins}:${secs}`;
+  }, 1000);
+}
+
+function incrementAnsweredCards() {
+  answeredCards++;
+  updateAvgTime();
+}
+
+function updateAvgTime() {
+  if (answeredCards > 0) {
+    const avg = (sessionSeconds / answeredCards).toFixed(1);
+    el('avgTime').textContent = `Avg sec/card: ${avg}s`;
+  } else {
+    el('avgTime').textContent = `Avg sec/card: 0.0s`;
+  }
+}
+
+
+// Start timer when session starts
+function startSession() {
+  // your existing session setup…
+  nextCard();
+  startSessionTimer(); // ⬅ add this
+}
+
 /* ========= Data model & persistence ========= */
 let definitionRevealed = false;
 const STORAGE_KEY = 'queueStudyApp.v1';
@@ -231,6 +320,32 @@ let sessionActive = false;
 
 // Helper IDs
 const el = id => document.getElementById(id);
+
+let timerRunning = false;
+
+const pausePlayBtn = el('pausePlayBtn');
+
+pausePlayBtn.addEventListener('click', () => {
+  if (!sessionActive) return; // safety check
+
+  if (timerRunning) {
+    // Pause timer
+    clearInterval(sessionTimerInterval);
+    timerRunning = false;
+    pausePlayBtn.textContent = '▶'; // play icon
+  } else {
+    // Resume timer
+    sessionTimerInterval = setInterval(() => {
+      sessionSeconds++;
+      const mins = String(Math.floor(sessionSeconds / 60)).padStart(2, '0');
+      const secs = String(sessionSeconds % 60).padStart(2, '0');
+      el('sessionTimer').textContent = `${mins}:${secs}`;
+      updateAvgTime();
+    }, 1000);
+    timerRunning = true;
+    pausePlayBtn.textContent = '⏸'; // pause icon
+  }
+});
 
 /* ---------- persistence ---------- */
 function saveStore() {
@@ -259,17 +374,27 @@ function mapStatusToClass(s){
   return ['New','status-new','--'];
 }
 function updateCountersUI(){
-  const newCount = store.cards.filter(c=>c.status==='new').length;
-  const masteredCount = store.cards.filter(c=>c.status==='mastered').length;
-  // In Queue = queued cards that are not new
-  const inQueueCount = queue.filter(item=>{
+  const newCount = store.cards.filter(c => c.status === 'new').length;
+  const masteredCount = store.cards.filter(c => c.status === 'mastered').length;
+
+  // In Queue = queued cards + current card if not new
+  let inQueueCount = queue.filter(item => {
     const c = getCard(item.cardId);
     return c && c.status !== 'new';
   }).length;
+
+  if(current){
+    const card = getCard(current.cardId);
+    if(card && card.status !== 'new'){
+      inQueueCount += 1; // count the current card too
+    }
+  }
+
   el('countNew').textContent = newCount;
   el('countInQueue').textContent = inQueueCount;
   el('countMastered').textContent = masteredCount;
 }
+
 /* ========= Import / Clear ========= */
 el('importBtn').addEventListener('click', ()=>{
   const raw = el('importBox').value.trim();
@@ -287,15 +412,55 @@ el('importBtn').addEventListener('click', ()=>{
   renderQueueUI();
   updateCountersUI();
 });
-el('clearBtn').addEventListener('click', ()=>{
-  if(!confirm('Clear ALL cards and progress?')) return;
+el('resetBtn').addEventListener('click', () => {
+  if (!confirm('Are you sure you want to reset everything? This cannot be undone.')) return;
+
+  // Reset store and queue
   store.cards = [];
   queue = [];
-  saveStore();
+
+  // Preserve theme
+  store.settings = {
+    wrongDelay: 2,
+    darkMode: store.settings.darkMode,
+    keyCorrect: '[',
+    keyWrong: ']'
+  };
+
+  // Reset session state
+  current = null;
+  tries = 0;
+  inputLocked = false;
+  sessionActive = false;
+
+  // Reset timer
+  sessionSeconds = 0;
+  clearInterval(sessionTimerInterval);
+  timerRunning = false;
+  el('sessionTimer').textContent = '00:00';
+  el('avgTime').textContent = 'Avg sec/card: 0.0s';
+
+  // Reset UI
+  el('studyArea').style.display = 'none';
+  el('sessionComplete').classList.add('hidden');
+  el('pausePlayBtn').style.display = 'none';
+  el('pausePlayBtn').textContent = '⏸'; // reset icon to pause
+  el('startBtn').style.display = 'inline-block';
+  el('answerInput').disabled = true;
+  el('answerInput').value = '';
+
+  el('importBox').value = '';
+  el('delayInput').value = 2;
+
+  applyTheme();
   renderQueueUI();
   updateCountersUI();
-  endSession();
+
+  saveStore();
 });
+
+
+
 
 /* ========= Dark mode ========= */
 const darkToggle = el('darkToggle');
@@ -325,23 +490,39 @@ function buildQueueFromCards(){
   updateCountersUI();
 }
 
-// Start session
-el('startBtn').addEventListener('click', ()=>{
-  if(store.cards.length === 0){ alert('No cards imported. Paste Term | Definition and Import.'); return; }
-  // ensure queue exists
-  if(queue.length === 0) buildQueueFromCards();
+/* ========= Start Session ========= */
+el('startBtn').addEventListener('click', () => {
+  if (store.cards.length === 0) {
+    alert('No cards imported. Paste Term | Definition and Import.');
+    return;
+  }
 
-  // load wrong delay
+  if (queue.length === 0) buildQueueFromCards();
+
   const d = parseInt(el('delayInput').value);
   store.settings.wrongDelay = isNaN(d) ? 0 : Math.max(0, d);
   saveStore();
+
   sessionActive = true;
   el('studyArea').style.display = 'block';
   el('sessionComplete').classList.add('hidden');
-  nextCard();
+
+  current = null;
+  tries = 0;
+  inputLocked = false;
+
   renderQueueUI();
   updateCountersUI();
+
+  // Show pause/play button now
+  pausePlayBtn.style.display = 'inline-block';
+  timerRunning = true;
+  startSession(); // starts timer and shows first card
+  
+  // ✅ Hide the Start Session button
+  el('startBtn').style.display = 'none';
 });
+
 
 el('restartBtn').addEventListener('click', ()=>{
   // restart fresh session with queue from store
@@ -439,24 +620,32 @@ function showDefinition(){
    - hide definition and lock input for wrongDelay seconds, then allow retry
    - note: card remains at front (we do not reinsert yet). Only when user eventually presses Correct will insertion happen
 */
-el('wrongBtn').addEventListener('click', ()=> {
-  if(!current) return;
+el('wrongBtn').addEventListener('click', () => {
+  if (!current) return;
   tries++;
   const card = getCard(current.cardId);
-  if(!card) return;
+  if (!card) return;
+
+  // Demote card status
   demoteCard(card);
 
-  // adjust offset: reduce 5 but not below 0
-  const newOffset = Math.max((current.offset || 0) - 5, 0);
-  current.offset = newOffset;
+  // Custom sequence offsets
+  const seq = [5, 10, 15, 25, 40, 65, 105, 170];
+  // Track the card's current sequence index (default to 0)
+  card.reinputIndex = card.reinputIndex || 0;
 
+  // Move back one step in the sequence on wrong (but not below 0)
+  card.reinputIndex = Math.max(card.reinputIndex - 1, 0);
+  current.offset = seq[card.reinputIndex];
+
+  // Hide definition and lock input temporarily
   el('definitionBox').style.display = 'none';
   el('judgeRow').style.display = 'none';
   inputLocked = true;
   el('answerInput').disabled = true;
 
   const delayMs = (store.settings.wrongDelay || 0) * 1000;
-  setTimeout(()=>{
+  setTimeout(() => {
     inputLocked = false;
     el('answerInput').disabled = false;
     el('answerInput').focus();
@@ -467,6 +656,7 @@ el('wrongBtn').addEventListener('click', ()=> {
   renderQueueUI();
   updateCountersUI();
 });
+
 
 /* Correct button logic:
    - If tries === 0 or ===1? In our flow: user must press Enter to reveal, which does not increment tries.
@@ -493,10 +683,13 @@ el('correctBtn').addEventListener('click', ()=> {
     card.streak = 0;
   }
 
-  // determine insertion offset
-  let insertAfter = (current.offset || 0) + 5; // +5 for correct
-  insertAfter = Math.min(insertAfter, queue.length); // cap at queue length
+  // sequence-based insertion offset
+  card.reinputIndex = card.reinputIndex || 0;  // track index in sequence
+  if(!hadWrong && card.reinputIndex < reinputSequence.length - 1){
+    card.reinputIndex++; // move forward in sequence if correct
+  }
 
+  const insertAfter = reinputSequence[card.reinputIndex];
   const queueItem = { cardId: card.id, offset: insertAfter };
   queue.splice(insertAfter, 0, queueItem);
 
@@ -504,9 +697,8 @@ el('correctBtn').addEventListener('click', ()=> {
   renderQueueUI();
   updateCountersUI();
   nextCard();
+  incrementAnsweredCards();
 });
-
-
 
 
 /* Demotion (one level down) when Wrong is pressed */
@@ -600,6 +792,7 @@ toggleQueueBtn.addEventListener('click', ()=>{
   else { q.style.display = 'none'; toggleQueueBtn.textContent = 'Show'; }
 });
 
+
 /* Load persisted state into UI */
 function initializeUI(){
   // settings
@@ -661,6 +854,7 @@ document.addEventListener('keydown', e=>{
     }
   }
 });
+/* ========= Import Save State ========= */
 el('importSaveBtn').addEventListener('click', () => {
   const raw = el('importBox').value.trim();
   if (!raw) {
@@ -675,28 +869,33 @@ el('importSaveBtn').addEventListener('click', () => {
 
   for (const line of lines) {
     const parts = line.split('|').map(p => p.trim());
-    if (parts.length < 4) continue;
-    const [term, def, status, offsetStr] = parts;
+    if (parts.length < 5) continue; // expect 5 fields now: term | def | status | offset | reinputIndex
+    const [term, def, status, offsetStr, reinputIndexStr] = parts;
     const offset = parseInt(offsetStr) || 0;
+    const reinputIndex = parseInt(reinputIndexStr) || 0;
     const id = uid();
-    importedCards.push({
-      id,
-      term,
-      def,
-      status,
-      streak: status === 'mastered' ? 3 : (status === 'applying' ? 2 : (status === 'learning' ? 1 : 0))
-    });
+    const streak = status === 'mastered' ? 3 : (status === 'applying' ? 2 : (status === 'learning' ? 1 : 0));
+    importedCards.push({ id, term, def, status, streak, reinputIndex });
     newQueue.push({ cardId: id, offset });
   }
 
   store.cards = importedCards;
   queue = newQueue;
+
+  current = null;
+  tries = 0;
+  inputLocked = false;
+
   saveStore();
   renderQueueUI();
   updateCountersUI();
-  el('importBox').value = ''; // clear textarea after import
+  renderCurrentCard();
+  el('importBox').value = '';
   alert('Import complete.');
 });
+
+
+
 
 /* ========= Export Save State to Clipboard ========= */
 function exportSaveStateToClipboard(){
@@ -711,7 +910,8 @@ function exportSaveStateToClipboard(){
   if(current){
     const card = getCard(current.cardId);
     if(card){
-      exportLines.push(`${card.term} | ${card.def} | ${card.status} | ${current.offset || 0}`);
+      exportLines.push(`${card.term} | ${card.def} | ${card.status} | ${current.offset || 0} | ${card.reinputIndex || 0}`);
+
     }
   }
 
@@ -720,7 +920,8 @@ function exportSaveStateToClipboard(){
     if(current && item.cardId === current.cardId) continue; // skip duplicate
     const card = getCard(item.cardId);
     if(!card) continue;
-    exportLines.push(`${card.term} | ${card.def} | ${card.status} | ${item.offset || 0}`);
+    exportLines.push(`${card.term} | ${card.def} | ${card.status} | ${item.offset || 0} | ${card.reinputIndex || 0}`);
+
   }
 
   const exportText = exportLines.join('\n');
@@ -739,9 +940,9 @@ function exportSaveStateToClipboard(){
 /* Connect to your button */
 el('exportSaveBtn').addEventListener('click', exportSaveStateToClipboard);
 
+
 </script>
 </body>
 </html>
-
 
 
