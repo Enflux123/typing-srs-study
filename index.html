@@ -245,7 +245,7 @@
 
           <div class="counters" style="margin-top:6px">
             <div class="counter">New: <span id="countNew">0</span></div>
-            <div class="counter">In Queue: <span id="countInQueue">0</span></div>
+            <div class="counter">Active: <span id="countInQueue">0</span></div>
             <div class="counter">Mastered: <span id="countMastered">0</span></div>
           </div>
 
@@ -376,23 +376,22 @@ function mapStatusToClass(s){
 function updateCountersUI(){
   const newCount = store.cards.filter(c => c.status === 'new').length;
   const masteredCount = store.cards.filter(c => c.status === 'mastered').length;
+  const totalCount = store.cards.length;
 
-  // In Queue = queued cards + current card if not new
   let inQueueCount = queue.filter(item => {
     const c = getCard(item.cardId);
     return c && c.status !== 'new';
   }).length;
-
   if(current){
     const card = getCard(current.cardId);
     if(card && card.status !== 'new'){
-      inQueueCount += 1; // count the current card too
+      inQueueCount += 1; 
     }
   }
 
   el('countNew').textContent = newCount;
   el('countInQueue').textContent = inQueueCount;
-  el('countMastered').textContent = masteredCount;
+  el('countMastered').textContent = `${masteredCount}/${totalCount}`;
 }
 
 /* ========= Import / Clear ========= */
@@ -421,7 +420,6 @@ el('resetBtn').addEventListener('click', () => {
 
   // Preserve theme
   store.settings = {
-    wrongDelay: 2,
     darkMode: store.settings.darkMode,
     keyCorrect: '[',
     keyWrong: ']'
@@ -450,7 +448,6 @@ el('resetBtn').addEventListener('click', () => {
   el('answerInput').value = '';
 
   el('importBox').value = '';
-  el('delayInput').value = 2;
 
   applyTheme();
   renderQueueUI();
@@ -869,7 +866,7 @@ el('importSaveBtn').addEventListener('click', () => {
 
   for (const line of lines) {
     const parts = line.split('|').map(p => p.trim());
-    if (parts.length < 5) continue; // expect 5 fields now: term | def | status | offset | reinputIndex
+    if (parts.length < 5) continue; // must have 5 fields
     const [term, def, status, offsetStr, reinputIndexStr] = parts;
     const offset = parseInt(offsetStr) || 0;
     const reinputIndex = parseInt(reinputIndexStr) || 0;
@@ -879,20 +876,30 @@ el('importSaveBtn').addEventListener('click', () => {
     newQueue.push({ cardId: id, offset });
   }
 
+  if (importedCards.length === 0) {
+    alert('No valid cards found in import.');
+    return;
+  }
+
+  // Replace store
   store.cards = importedCards;
   queue = newQueue;
 
+  // Reset session state
   current = null;
   tries = 0;
   inputLocked = false;
+  sessionActive = false;
 
   saveStore();
   renderQueueUI();
   updateCountersUI();
   renderCurrentCard();
   el('importBox').value = '';
+
   alert('Import complete.');
 });
+
 
 
 
